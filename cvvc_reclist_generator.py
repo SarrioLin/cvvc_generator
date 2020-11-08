@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from collections import namedtuple
 from random import choice, shuffle
 
@@ -46,8 +48,9 @@ class ReclistGenerator:
             for c in self.c_set:
                 self.vc_set.add((vr, c))
 
-    def find_cvv(self, cvv: str = None, c: str = None,
-                 cv: str = None, vr: str = None, exception: set=None) -> CVV or None:
+    def find_cvv(self, cvv: str = None, c: str = None, cv: str = None,
+                 vr: str = None, exception: set = None) -> CVV or None:
+
         '''输入cvv，c，cv，vr来查找整音，并返回类CVV（找不到则返回None）
 
         :param cvv: 整音，如“bai”，“cai”等整字拼音，只能够单独使用。
@@ -59,6 +62,7 @@ class ReclistGenerator:
                 当前只能与参数c一同使用，且给定的为vr集合（我懒得补完了Ok？
         :return: 如果找到了则返回类CVV，否则返回None。
         '''
+
         if cvv:
             for e_cvv in self.CVV_list:
                 if e_cvv.cvv == cvv:
@@ -83,7 +87,7 @@ class ReclistGenerator:
                 for c_idx in c_idx_list:
                     cvv = self.CVV_list[c_idx]
                     if cvv.vr not in exception:
-                       return cvv
+                        return cvv
             else:
                 c_idx = choice(self.c_idx_dict[c])
                 return self.CVV_list[c_idx]
@@ -98,7 +102,8 @@ class ReclistGenerator:
             return e_cvv
 
     def gen_cvvc_reclist(self, length: int = 6, group=False, cv_head=True,
-                         plan_b=False, random=True, merge_cv=False, gottal: set=None):
+                         plan_b=False, random=True, merge_cv=False, stop_coda: set = None):
+
         '''用于生成cvvc录音表
 
         :param length: 每一行的字数。
@@ -110,18 +115,19 @@ class ReclistGenerator:
                 即 aa_aa_aa 请使用5到8字BGM并将最后一字读满，同时oto会生成长音素aa L
         :param random: 是否以乱序的方式收录余下的vc部（否的话相对好读但每字oto数会降低。
         :param merge_cv: 是否合并cv部，如”ba“和”bai“合并为”ba“。
-        :param gottal: 对于粤语等含有入声的语言，因为入声表现为强烈的停顿，因此可以不进行vc部的收录。
+        :param stop_coda: 对于粤语等含有入声的语言，因为入声表现为强烈的停顿，因此可以不进行vc部的收录。
                 当不需要入声vc时，需要输入一个包含入声vr的set，如{"aap"}。
         :return: 生成的录音表会收录在self.reclist当中。
         '''
+
         vc_set, vr_set = self.vc_set.copy(), self.vr_set.copy()
         cv_set, cv_head_set = self.cv_set.copy(), self.cv_set.copy()
         cvv_set, cvv_head_set = self.cvv_set.copy(), self.cvv_set.copy()
 
         # 如果不需要入声vc部
-        if gottal is not None:
+        if stop_coda is not None:
             gottal_vc_set = set()
-            for gottal_vr in gottal:
+            for gottal_vr in stop_coda:
                 for c in self.c_set:
                     # 找到所有的入声vc部
                     gottal_vc_set.add((gottal_vr, c))
@@ -146,7 +152,7 @@ class ReclistGenerator:
         if not group and not plan_b:
             i = 0
             row = []
-            #遍历所有的整音进行排列
+            # 遍历所有的整音进行排列
             for cvv in self.CVV_list:
                 # 行内延伸
                 if i < length:
@@ -157,11 +163,10 @@ class ReclistGenerator:
                     except IndexError:
                         pass
                     # 根据是否合并cv部分情况收录cv
-                    if i > 0:
-                        if merge_cv:
-                            cv_set -= {cvv.cv}
-                        else:
-                            cvv_set -= {cvv.cvv}
+                    if merge_cv:
+                        cv_set -= {cvv.cv}
+                    else:
+                        cvv_set -= {cvv.cvv}
                     i += 1
 
                 # 到达行内指定字数时
@@ -176,8 +181,12 @@ class ReclistGenerator:
                     vr_set -= {row[-1].vr}
                     # 将该行添加到self.reclist当中
                     self.reclist.append(row)
-                    row = []
-                    i = 0
+                    row = [cvv]
+                    if merge_cv:
+                        cv_set -= {cvv.cv}
+                    else:
+                        cvv_set -= {cvv.cvv}
+                    i = 1
 
             # 添加末尾字数未到length的可能遗漏的行
             if row and row != self.reclist[-1]:
@@ -237,7 +246,7 @@ class ReclistGenerator:
                         vr_set -= {row[-1].vr}
 
             # ABA
-            ABA_cvv_group = set()
+            aba_cvv_group = set()
             for cvv1 in self.CVV_list:
                 for cvv2 in self.CVV_list:
                     if cvv1.c == cvv2.c or cvv1.vr == cvv2.vr:
@@ -245,7 +254,7 @@ class ReclistGenerator:
                     vcs = {(cvv1.vr, cvv1.c), (cvv1.vr, cvv2.c),
                            (cvv2.vr, cvv1.c), (cvv2.vr, cvv2.c)}
                     if len(vcs & vc_set) == 2:
-                        ABA_cvv_group.add((cvv1, cvv2))
+                        aba_cvv_group.add((cvv1, cvv2))
                         vc_set -= {(cvv1.vr, cvv2.c), (cvv2.vr, cvv1.c)}
                         if merge_cv:
                             cv_set -= {cvv1.cv, cvv2.cv}
@@ -253,11 +262,11 @@ class ReclistGenerator:
                             cvv_set -= {cvv1.cvv, cvv2.cvv}
 
             # ABACDC
-            while ABA_cvv_group:
-                cvv_group1 = ABA_cvv_group.pop()
+            while aba_cvv_group:
+                cvv_group1 = aba_cvv_group.pop()
                 cvv1, cvv2 = cvv_group1[0], cvv_group1[1]
                 try:
-                    cvv_group2 = ABA_cvv_group.pop()
+                    cvv_group2 = aba_cvv_group.pop()
                     cvv3, cvv4 = cvv_group2[0], cvv_group2[1]
                     if (cvv1.vr, cvv3.c) in vc_set:
                         row = [cvv1, cvv2, cvv1, cvv3, cvv4, cvv3]
@@ -301,13 +310,13 @@ class ReclistGenerator:
                 if i == 0:
                     vc = vc_set.pop()
                     cvv1 = self.find_cvv(vr=vc[0])
-                    cvv2 = self.find_cvv(c=vc[1], exception=gottal)
+                    cvv2 = self.find_cvv(c=vc[1], exception=stop_coda)
                     row.extend([cvv1, cvv2])
                     # 依情况收录cv部
                     if merge_cv:
-                        cv_set -= {cvv2.cv}
+                        cv_set -= {cvv1.cv, cvv2.cv}
                     else:
-                        cvv_set -= {cvv2.cvv}
+                        cvv_set -= {cvv1.cvv, cvv2.cvv}
                     i += 2
 
                 # 行内延伸
@@ -317,7 +326,7 @@ class ReclistGenerator:
                     for vr_idx in self.vr_idx_dict[vr]:
                         cvv = self.CVV_list[vr_idx]
                         # 不收录入声vc时跳过含有入声的整音
-                        if gottal and cvv.vr in gottal:
+                        if stop_coda and cvv.vr in stop_coda:
                             break
                         if (vc := (vr, cvv.c)) in vc_set:
                             row.append(cvv)
@@ -335,7 +344,7 @@ class ReclistGenerator:
                         if i < length - 1:
                             vc = vc_set.pop()
                             cvv1 = self.find_cvv(vr=vc[0])
-                            cvv2 = self.find_cvv(c=vc[1], exception=gottal)
+                            cvv2 = self.find_cvv(c=vc[1], exception=stop_coda)
                             row.extend([cvv1, cvv2])
                             if merge_cv:
                                 cv_set -= {cvv1.cv, cvv2.cv}
@@ -389,16 +398,10 @@ class ReclistGenerator:
             for re_vc in re_vc_set_list:
                 if i < length - 1:
                     row.extend([re_vc[0], re_vc[1]])
-                    if i == 0:
-                        if merge_cv:
-                            cv_set -= {re_vc[1].cv}
-                        else:
-                            cvv_set -= {re_vc[1].cvv}
+                    if merge_cv:
+                        cv_set -= {re_vc[0].cv, re_vc[1].cv}
                     else:
-                        if merge_cv:
-                            cv_set -= {re_vc[0].cv, re_vc[1].cv}
-                        else:
-                            cvv_set -= {re_vc[0].cvv, re_vc[1].cvv}
+                        cvv_set -= {re_vc[0].cvv, re_vc[1].cvv}
                     i += 2
                 else:
                     if cv_head and merge_cv:
@@ -444,13 +447,15 @@ class ReclistGenerator:
                 cvv = self.find_cvv(cv=cv)
                 cv_set -= {cvv.cv}
                 vr_set -= {cvv.vr}
-                if i < length - 1:
+                if i < (length+1) // 2:
                     row.extend([cvv, r])
-                    i += 2
+                    i += 1
                 else:
+                    if row[-1] == r:
+                        del row[-1]
                     self.reclist.append(row)
                     row = [cvv, r]
-                    i = 2
+                    i = 1
 
         elif cv_head and not merge_cv:
             for cv in cvv_head_set:
@@ -458,15 +463,19 @@ class ReclistGenerator:
                 cvv = self.find_cvv(cvv=cv)
                 cvv_set -= {cvv.cvv}
                 vr_set -= {cvv.vr}
-                if i < length - 1:
+                if i < (length+1) // 2:
                     row.extend([cvv, r])
-                    i += 2
+                    i += 1
                 else:
+                    if row[-1] == r:
+                        del row[-1]
                     self.reclist.append(row)
                     row = [cvv, r]
-                    i = 2
+                    i = 1
 
         if row and row != self.reclist[-1]:
+            if row[-1] == CVV():
+                del row[-1]
             self.reclist.append(row)
             if cv_head and merge_cv:
                 cv_head_set -= {row[0].cv}
@@ -480,12 +489,8 @@ class ReclistGenerator:
         if merge_cv:
             for cv in cv_set:
                 if i < length:
-                    if i == 0:
-                        row.extend([self.find_cvv(cv=cv)]*2)
-                        i = 2
-                    else:
-                        row.append(self.find_cvv(cv=cv))
-                        i += 1
+                    row.append(self.find_cvv(cv=cv))
+                    i += 1
                 else:
                     self.reclist.append(row)
                     vr_set -= {row[-1].vr}
@@ -494,12 +499,8 @@ class ReclistGenerator:
         else:
             for cv in cvv_set:
                 if i < length:
-                    if i == 0:
-                        row.extend([self.find_cvv(cvv=cv)]*2)
-                        i = 2
-                    else:
-                        row.append(self.find_cvv(cvv=cv))
-                        i += 1
+                    row.append(self.find_cvv(cvv=cv))
+                    i += 1
                 else:
                     self.reclist.append(row)
                     vr_set -= {row[-1].vr}
@@ -516,35 +517,30 @@ class ReclistGenerator:
         for vr in vr_set:
             r = CVV()
             cvv = self.find_cvv(vr=vr)
-            if i < length - 1:
+            if i < (length+1) // 2:
                 row.extend([cvv, r])
-                i += 2
+                i += 1
             else:
+                if row[-1] == r:
+                    del row[-1]
                 self.reclist.append(row)
                 row = [cvv, r]
-                i = 2
+                i = 1
 
         if row and row != self.reclist[-1]:
+            if row[-1] == CVV():
+                del row[-1]
             self.reclist.append(row)
 
-    def print_reclist(self):
-        '''用print打印当前录音表
+    def gen_oto(self, cv_head=True, merge_cv=False, stop_coda=None, debug=True,
+                plan_b=False, max_vc: int = 1, max_cv: int = 1, max_vr: int = 1,
+                bpm: float = 120, length: int = 6):
 
-        :return: None
-        '''
-        for row in self.reclist:
-            for cvv in row:
-                print("_%s" % cvv.cvv, end="")
-            print()
-
-    def gen_oto(self, cv_head=True, merge_cv=False, gottal=None, debug=True,
-                plan_b=False, max_vc: int=1, max_cv: int=1, max_vr: int=1,
-                bpm: float=120, length: int=6):
         '''用于生成cvvc oto
 
         :param cv_head: 是否生成开头音
         :param merge_cv: 是否合并cv部
-        :param gottal: 是否生成gottal vc
+        :param stop_coda: 是否生成stop coda vc
         :param debug: 检查是否遗漏oto（仅当oto份数为1时有明确性
         :param plan_b: 是否将每个整音重复三次形成一行的录音方案
         :param max_vc: 最大的相同vc oto数
@@ -556,8 +552,8 @@ class ReclistGenerator:
         '''
 
         # 为了方便将入声设为空集
-        if gottal is None:
-            gottal = set()
+        if stop_coda is None:
+            stop_coda = set()
 
         # 用于分组存放oto
         vc_part = []
@@ -600,7 +596,7 @@ class ReclistGenerator:
                     c = cvv.c
                     if vr == "R" or c == "R":
                         pass
-                    elif vr in gottal:
+                    elif vr in stop_coda:
                         pass
                     else:
                         if (vr, c) in vc_dict:
@@ -608,7 +604,7 @@ class ReclistGenerator:
                         else:
                             vc_dict[(vr, c)] = 1
                         if (n := vc_dict[(vr, c)]) <= max_vc:
-                            ofs = rhy - c_vel - v_vel - ovl  #左线
+                            ofs = rhy - c_vel - v_vel - ovl  # 左线
                             pre = ovl + v_vel  # 红线
                             con = pre + c_vel / 6  # 非拉伸的紫线
                             cuf = - (con + c_vel / 6)  # 右线
@@ -621,7 +617,9 @@ class ReclistGenerator:
                             vc_part.append(wav + vc + numl_para)
 
                 # cv
-                if j > 0:
+                if plan_b and j == 0:
+                    pass
+                else:
                     if merge_cv:
                         cv = cvv.cv
                     else:
@@ -635,7 +633,10 @@ class ReclistGenerator:
                         ovl = c_vel / 3
                         pre = c_vel
                         con = pre + bpm_para*100
-                        cuf = - (pre + bpm_para*(500 - 100 - cvv.v_vel - row[j+1].c_vel))
+                        if j == len(row) - 2:
+                            cuf = - (pre + bpm_para*(500 - 100 - cvv.v_vel - row[j+1].c_vel))
+                        else:
+                            cuf = - (pre + bpm_para*(500 - 100 - cvv.v_vel))
                         numl_para = ",{:.1f},{:.1f},{:.1f},{:.1f}" \
                                     ",{:.1f}".format(ofs, con, cuf, pre, ovl)
                         if n > 1:
@@ -673,7 +674,10 @@ class ReclistGenerator:
                             ovl = 30
                             pre = c_vel
                             con = pre + bpm_para*100
-                            cuf = - (pre + bpm_para*(500 - 100 - cvv.v_vel - row[j+1].c_vel))
+                            if j == len(row) - 2:
+                                cuf = - (pre + bpm_para*(500 - 100 - cvv.v_vel - row[j+1].c_vel))
+                            else:
+                                cuf = - (pre + bpm_para*(500 - 100 - cvv.v_vel))
                             numl_para = ",{:.1f},{:.1f},{:.1f},{:.1f}" \
                                         ",{:.1f}".format(ofs, con, cuf, pre, ovl)
                             if n > 1:
@@ -683,7 +687,8 @@ class ReclistGenerator:
                             cv_head_part.append(wav + cv + numl_para)
 
                 # vr
-                if j == len(row)-1 or (j < len(row)-1 and row[j+1].cvv == "R"):
+                if plan_b and i < len(self.CVV_list) or\
+                        j == len(row)-1 or (j < len(row)-1 and row[j+1].cvv == "R"):
                     vr = cvv.vr
                     if vr in vr_dict:
                         vr_dict[vr] += 1
@@ -691,8 +696,13 @@ class ReclistGenerator:
                         vr_dict[vr] = 1
                     if (n := vr_dict[vr]) <= max_vr:
                         ovl = bpm_para*80
-                        pre = ovl + bpm_para*cvv.v_vel
-                        ofs = rhy + bpm_para*500 - pre
+                        if plan_b:
+                            pre = ovl + cvv.v_vel
+                            ofs = bpm_para*(1200 + length*500) - pre
+                        else:
+
+                            pre = ovl + bpm_para*cvv.v_vel
+                            ofs = rhy + bpm_para*500 - pre
                         con = pre + 50
                         cuf = - (con + 30)
                         numl_para = ",{:.1f},{:.1f},{:.1f},{:.1f}" \
@@ -710,8 +720,8 @@ class ReclistGenerator:
 
         # debug
         if debug:
-            if gottal is None:
-                gottal = set()
+            if stop_coda is None:
+                stop_coda = set()
             if merge_cv:
                 cv_num = len(self.cv_set)
             else:
@@ -725,7 +735,7 @@ class ReclistGenerator:
                     cv_head_num = len(self.cv_set)
             else:
                 cv_head_num = 0
-            vc_num = len(self.vr_set - gottal)*len(self.c_set)
+            vc_num = len(self.vr_set - stop_coda) * len(self.c_set)
             vr_num = len(self.vr_set)
             oto_num = cv_num + cv_head_num + vc_num + vr_num
             n = 0
@@ -776,7 +786,7 @@ class ReclistGenerator:
                     u = n / word_num
                     print("整音利用率为：{:.4f}（不含休止符R）".format(u))
 
-    def output_list(self, reclist_name: str="reclist.txt", oto_name: str="oto.ini"):
+    def output_list(self, reclist_name: str = "reclist.txt", oto_name: str = "oto.ini"):
         '''生成录音表和oto文件
 
         :param reclist_name: 录音表的文件名
@@ -797,8 +807,8 @@ class ReclistGenerator:
                 oto_str += "%s\n" % oto
 
         # output files
-        with open(reclist_name, mode="w+") as f:
+        with open(reclist_name, mode="w+", encoding="UTF-8") as f:
             f.write(reclist_str)
 
-        with open(oto_name, mode="w+") as f:
+        with open(oto_name, mode="w+", encoding="UTF-8") as f:
             f.write(oto_str)
