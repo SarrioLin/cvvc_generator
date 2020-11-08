@@ -1,5 +1,5 @@
 # cvvc_generator
-对粤语会是一个更好的用于生成cvvc录音表和oto吐表机？
+对粤语会是一个更好的用于生成cvvc录音表和oto的吐表机？
 
 can_cvvc.txt是字典文件，cvvc_reclist_generator.py是吐表机的代码
 
@@ -25,7 +25,7 @@ can_cvvc.txt是字典文件，cvvc_reclist_generator.py是吐表机的代码
 用于生成录音表和oto的吐表机，都尽量写了注释了（中文注释大欢喜？
 用的时候（如果有的话？）先创建一个ReclistGenerator实例，再依次调用read_dict，gen_cvvc_relist，gen_oto和output_list这几个函数，就可以得到一个录音表和对应的oto文件了
 **如果你看到没有像科林吐表机那样的傻瓜式生成方法，说明这个东东还不是可以大大方方拿出手的东西，是beta版本啊！！！**
-如果你看懂了知道怎么用那么一下是推荐的gen_cvvc_relist参数**（请认真考虑是否愿意花费时间去录一个可能会报废的beta）**：
+如果你看懂了知道怎么用那么一下是推荐的gen_cvvc_relist参数**（请认真考虑是否愿意花费时间去录一个可能会报废的beta）：**
 1. 如果是想要录全音素的话，那么推荐plan_b=True，group=True，random=False，其余默认
 2. 如果不想要开头音，那么推荐group=True，random=False，其余默认
 以上的推荐参数会生成一个绝大多数行都是有一定规律的比较好读的6字表（本人表示读粤拼真的会结巴
