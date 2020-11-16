@@ -9,17 +9,18 @@ CVV = namedtuple("CVV", "cvv c cv vr c_vel v_vel",
 
 
 class ReclistGenerator:
-    CVV_list = []
-    cvv_set = set()
-    c_set = set()
-    cv_set = set()
-    vr_set = set()
-    vc_set = set()
-    c_idx_dict = {}
-    cv_idx_dict = {}
-    vr_idx_dict = {}
-    reclist = []
-    oto = []
+    def __init__(self):
+        self.CVV_list = []
+        self.cvv_set = set()
+        self.c_set = set()
+        self.cv_set = set()
+        self.vr_set = set()
+        self.vc_set = set()
+        self.c_idx_dict = {}
+        self.cv_idx_dict = {}
+        self.vr_idx_dict = {}
+        self.reclist = []
+        self.oto = []
 
     def read_dict(self, dict_path: str):
         with open(dict_path, mode="r") as f:
@@ -101,8 +102,8 @@ class ReclistGenerator:
             e_cvv = self.CVV_list[vr_idx]
             return e_cvv
 
-    def gen_cvvc_reclist(self, length: int = 6, group=False, cv_head=True,
-                         plan_b=False, random=True, merge_cv=False, stop_coda: set = None):
+    def gen_cvvc_reclist(self, length: int = 6, group=True, sep=False, cv_head=True,
+                         plan_b=False, random=False, merge_cv=False, stop_coda: set = None):
 
         '''用于生成cvvc录音表
 
@@ -110,6 +111,7 @@ class ReclistGenerator:
         :param group: 该录音方式会以每两个音（A，B）为一组来组成行，
                 根据其包含未收录vc的情况会以一下方式排列：AABBA，ABBA，ABA，
                 其余未收录的vc会以不规则（即乱序）的方式进行收录，每行字数为length。
+        :param sep: 是否将两行ABA合并为一行
         :param cv_head: 是否收录所有的开头音。
         :param plan_b: 沿用Hr.J式CVVC录音表的录音方式，每个整音会重复三次成一行
                 即 aa_aa_aa 请使用5到8字BGM并将最后一字读满，同时oto会生成长音素aa L
@@ -198,6 +200,7 @@ class ReclistGenerator:
                 vr_set -= {row[-1].vr}
 
         elif group:
+
             # AABBA part
             for cvv1 in self.CVV_list:
                 for cvv2 in self.CVV_list:
@@ -219,8 +222,9 @@ class ReclistGenerator:
                             if cv_head:
                                 cvv_head_set -= {cvv1.cvv}
                         vr_set -= {cvv1.vr}
+                        break
 
-            # ABBA
+            # ABBA or AABB
             for cvv1 in self.CVV_list:
                 for cvv2 in self.CVV_list:
                     # 筛选条件一
@@ -229,10 +233,14 @@ class ReclistGenerator:
                     vcs = {(cvv1.vr, cvv1.c), (cvv1.vr, cvv2.c),
                            (cvv2.vr, cvv1.c), (cvv2.vr, cvv2.c)}
                     if len(vcs & vc_set) == 3:
-                        if (cvv1.vr, cvv1.c) in vc_set:
+                        if (cvv2.vr, cvv2.c) not in vc_set:
                             row = [cvv2, cvv1, cvv1, cvv2]
-                        else:
+                        elif (cvv1.vr, cvv1.c) not in vc_set:
                             row = [cvv1, cvv2, cvv2, cvv1]
+                        elif (cvv1.vr, cvv2.c) not in vc_set:
+                            row = [cvv2, cvv2, cvv1, cvv1]
+                        else:
+                            row = [cvv1, cvv1, cvv2, cvv2]
                         self.reclist.append(row)
                         vc_set -= vcs
                         if merge_cv:
@@ -245,7 +253,63 @@ class ReclistGenerator:
                                 cvv_head_set -= {row[0].cvv}
                         vr_set -= {row[-1].vr}
 
+
+            # AAB
+            count = 0
+            cvv_group1, cvv_group2 = None, None
+            for cvv in self.CVV_list:
+                vr, c = cvv.vr, cvv.c
+                if (vr, c) in vc_set:
+                    for vc in vc_set:
+                        if vc[0] == vr and vc[1] != c:
+                            cvv2 = self.find_cvv(c=vc[1], exception=stop_coda)
+                            if merge_cv:
+                                cv_set -= {cvv.cv, cvv2.cv}
+                            else:
+                                cvv_set -= {cvv.cvv, cvv2.cvv}
+                            vc_set -= {(vr, c), vc}
+                            count += 1
+                            if count % 2 == 1:
+                                cvv_group1 = (cvv, cvv2)
+                            else:
+                                cvv_group2 = (cvv, cvv2)
+
+                            if not sep:
+                                if count > 1 and count % 2 == 0:
+                                    cvv1, cvv2 = cvv_group1[0], cvv_group1[1]
+                                    cvv3, cvv4 = cvv_group2[0], cvv_group2[1]
+                                    if (vc := (cvv2.vr, cvv3.c)) in vc_set:
+                                        self.reclist.append([cvv1, cvv1, cvv2,
+                                                             cvv3, cvv3, cvv4])
+                                        vc_set -= {vc}
+                                    else:
+                                        self.reclist.append([cvv3, cvv3, cvv4,
+                                                             cvv1, cvv1, cvv2])
+                                        vc_set -= {(cvv4.vr, cvv1.c)}
+                            else:
+                                self.reclist.append([cvv, cvv, cvv2])
+
+                            if merge_cv:
+                                cv_head_set -= {self.reclist[-1][0].cv}
+                            else:
+                                if count > 1:
+                                    cvv_head_set -= {self.reclist[-1][0].cvv}
+
+                            if count > 1:
+                                vr_set -= {self.reclist[-1][-1].vr}
+                            break
+            if not sep and count % 2 == 1:
+                cvv1, cvv2 = cvv_group1[0], cvv_group1[1]
+                self.reclist.append([cvv1, cvv1, cvv2])
+                if merge_cv:
+                    cv_head_set -= {cvv1.cv}
+                else:
+                    cvv_head_set -= {cvv1.cvv}
+                vr_set -= {cvv2.vr}
+
             # ABA
+            count = 0
+            cvv_group1, cvv_group2 = None, None
             aba_cvv_group = set()
             for cvv1 in self.CVV_list:
                 for cvv2 in self.CVV_list:
@@ -255,50 +319,70 @@ class ReclistGenerator:
                            (cvv2.vr, cvv1.c), (cvv2.vr, cvv2.c)}
                     if len(vcs & vc_set) == 2:
                         aba_cvv_group.add((cvv1, cvv2))
-                        vc_set -= {(cvv1.vr, cvv2.c), (cvv2.vr, cvv1.c)}
+                        vc_set -= vcs
                         if merge_cv:
                             cv_set -= {cvv1.cv, cvv2.cv}
                         else:
                             cvv_set -= {cvv1.cvv, cvv2.cvv}
 
-            # ABACDC
-            while aba_cvv_group:
-                cvv_group1 = aba_cvv_group.pop()
-                cvv1, cvv2 = cvv_group1[0], cvv_group1[1]
-                try:
-                    cvv_group2 = aba_cvv_group.pop()
-                    cvv3, cvv4 = cvv_group2[0], cvv_group2[1]
-                    if (cvv1.vr, cvv3.c) in vc_set:
-                        row = [cvv1, cvv2, cvv1, cvv3, cvv4, cvv3]
-                    elif(cvv1.vr, cvv4.c) in vc_set:
-                        row = [cvv1, cvv2, cvv1, cvv4, cvv3, cvv4]
-                    elif (cvv2.vr, cvv3.c) in vc_set:
-                        row = [cvv2, cvv1, cvv2, cvv3, cvv4, cvv3]
-                    else:
-                        row = [cvv2, cvv1, cvv2, cvv4, cvv3, cvv4]
-                    if cv_head and merge_cv:
-                        cv_head_set -= {row[0].cv}
-                    elif cv_head and not merge_cv:
-                        cvv_head_set -= {row[0].cvv}
-                    vc_set -= {(row[2].vr, row[3].c)}
+                        count += 1
+                        if count % 2 == 1:
+                            cvv_group1 = (cvv1, cvv2)
+                        else:
+                            cvv_group2 = (cvv1, cvv2)
 
-                except KeyError:
-                    if merge_cv:
-                        if cvv1.cv in cv_head_set:
-                            row = [cvv1, cvv2, cvv1]
+                        if not sep:
+                            if count > 1 and count % 2 == 0:
+                                cvv1, cvv2 = cvv_group1[0], cvv_group1[1]
+                                cvv3, cvv4 = cvv_group2[0], cvv_group2[1]
+                                if (cvv1.vr, cvv3.c) in vc_set:
+                                    row = [cvv1, cvv2, cvv1, cvv3, cvv4, cvv3]
+                                elif (cvv2.vr, cvv3.c) in vc_set:
+                                    row = [cvv2, cvv1, cvv2, cvv3, cvv4, cvv3]
+                                elif (cvv1.vr, cvv4.c) in vc_set:
+                                    row = [cvv1, cvv2, cvv1, cvv4, cvv3, cvv4]
+                                else:
+                                    row = [cvv2, cvv1, cvv2, cvv4, cvv3, cvv4]
+                                self.reclist.append(row)
+                                vc_set -= {(row[2].vr, row[3].c)}
+                                vr_set -= {row[-1].vr}
+                                if merge_cv:
+                                    cv_head_set -= {row[0].cv}
+                                else:
+                                    cvv_head_set -= {row[0].cvv}
                         else:
-                            row = [cvv2, cvv1, cvv2]
-                        if cv_head:
-                            cv_head_set -= {row[0].cv}
+                            if merge_cv:
+                                if cvv1.cv in cv_head_set:
+                                    row = [cvv1, cvv2, cvv1]
+                                else:
+                                    row = [cvv2, cvv1, cvv2]
+                                cv_head_set -= {row[0].cv}
+                            else:
+                                if cvv1.cvv in cvv_head_set:
+                                    row = [cvv1, cvv2, cvv1]
+                                else:
+                                    row = [cvv2, cvv1, cvv2]
+                                cvv_head_set -= {row[0].cvv}
+                            self.reclist.append(row)
+                            vr_set -= {row[-1].vr}
+
+            if not sep and count % 2 == 1:
+                cvv1, cvv2 = cvv_group1[0], cvv_group1[1]
+                if merge_cv:
+                    if cvv1.cv in cv_head_set:
+                        row = [cvv1, cvv2, cvv1]
                     else:
-                        if cvv1.cvv in cvv_head_set:
-                            row = [cvv1, cvv2, cvv1]
-                        else:
-                            row = [cvv2, cvv1, cvv2]
-                        if cv_head:
-                            cvv_head_set -= {row[0].cvv}
+                        row = [cvv2, cvv1, cvv2]
+                    cv_head_set -= {row[0].cv}
+                else:
+                    if cvv1.cvv in cvv_head_set:
+                        row = [cvv1, cvv2, cvv1]
+                    else:
+                        row = [cvv2, cvv1, cvv2]
+                    cvv_head_set -= {row[0].cvv}
                 self.reclist.append(row)
                 vr_set -= {row[-1].vr}
+
 
         # 是否以乱序方式收录余下的vc部
         if random:
@@ -383,19 +467,19 @@ class ReclistGenerator:
         # 以非乱序形式收录余下vc部
         else:
             # 创建一个list记录vc整音组
-            re_vc_set_list = []
+            remain_vc_set_list = []
             # 按照c的顺序依次给每个未收录的vc部寻找整音组
             for c in self.c_set:
-                c_cvv = self.find_cvv(c=c)
+                c_cvv = self.find_cvv(c=c, exception=stop_coda)
                 for vc in vc_set:
                     if vc[1] == c:
                         vr_cvv = self.find_cvv(vr=vc[0])
-                        re_vc_set_list.append((vr_cvv, c_cvv))
+                        remain_vc_set_list.append((vr_cvv, c_cvv))
 
             # 将vc整音组收入reclist中
             i = 0
             row = []
-            for re_vc in re_vc_set_list:
+            for re_vc in remain_vc_set_list:
                 if i < length - 1:
                     row.extend([re_vc[0], re_vc[1]])
                     if merge_cv:
@@ -441,8 +525,12 @@ class ReclistGenerator:
         # 收录余下的cv_head（如果要求的话
         i = 0
         row = []
+        cv_head_list = list(cv_head_set)
+        cvv_head_list = list(cvv_head_set)
+        cv_head_list.sort()
+        cvv_head_list.sort()
         if cv_head and merge_cv:
-            for cv in cv_head_set:
+            for cv in cv_head_list:
                 r = CVV()
                 cvv = self.find_cvv(cv=cv)
                 cv_set -= {cvv.cv}
@@ -458,7 +546,7 @@ class ReclistGenerator:
                     i = 1
 
         elif cv_head and not merge_cv:
-            for cv in cvv_head_set:
+            for cv in cvv_head_list:
                 r = CVV()
                 cvv = self.find_cvv(cvv=cv)
                 cvv_set -= {cvv.cvv}
@@ -486,8 +574,12 @@ class ReclistGenerator:
         # 收录余下cv部
         i = 0
         row = []
+        cv_list = list(cv_set)
+        cvv_list = list(cvv_set)
+        cv_list.sort()
+        cvv_list.sort()
         if merge_cv:
-            for cv in cv_set:
+            for cv in cv_list:
                 if i < length:
                     row.append(self.find_cvv(cv=cv))
                     i += 1
@@ -497,7 +589,7 @@ class ReclistGenerator:
                     row = [self.find_cvv(cv=cv)]
                     i = 1
         else:
-            for cv in cvv_set:
+            for cv in cvv_list:
                 if i < length:
                     row.append(self.find_cvv(cvv=cv))
                     i += 1
@@ -582,7 +674,7 @@ class ReclistGenerator:
 
                 # 生成各部分oto的数值
                 bpm_para = float(bpm / 120)
-                rhy = bpm_para*(1200 + j*500)  # 每一拍的位置
+                rhy = bpm_para*(1250 + j*500)  # 每一拍的位置
                 ovl = bpm_para*80  # 重叠线
                 c_vel = bpm_para*cvv.c_vel  # 该音符的辅音长度
                 if j > 0:
@@ -594,9 +686,7 @@ class ReclistGenerator:
                 if j > 0:
                     vr = row[j-1].vr
                     c = cvv.c
-                    if vr == "R" or c == "R":
-                        pass
-                    elif vr in stop_coda:
+                    if vr == "R" or c == "R" or vr in stop_coda:
                         pass
                     else:
                         if (vr, c) in vc_dict:
@@ -687,8 +777,7 @@ class ReclistGenerator:
                             cv_head_part.append(wav + cv + numl_para)
 
                 # vr
-                if plan_b and i < len(self.CVV_list) or\
-                        j == len(row)-1 or (j < len(row)-1 and row[j+1].cvv == "R"):
+                if j == len(row)-1 or (j < len(row)-1 and row[j+1].cvv == "R"):
                     vr = cvv.vr
                     if vr in vr_dict:
                         vr_dict[vr] += 1
@@ -698,9 +787,8 @@ class ReclistGenerator:
                         ovl = bpm_para*80
                         if plan_b:
                             pre = ovl + cvv.v_vel
-                            ofs = bpm_para*(1200 + length*500) - pre
+                            ofs = bpm_para*(1250 + length*500) - pre
                         else:
-
                             pre = ovl + bpm_para*cvv.v_vel
                             ofs = rhy + bpm_para*500 - pre
                         con = pre + 50
